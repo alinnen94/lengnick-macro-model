@@ -87,3 +87,114 @@ class LengnickModel(Model):
                       "Total Production": self._get_total_production,
                       }
             )
+
+    # ------------------------------------------------------------------
+    # Initialisation helpers
+    # ------------------------------------------------------------------
+
+    def init_households(self):
+          """
+          Create households with randomised starting values.
+          Mirrors Java buildModel() household loop.
+          """
+          self.households = []
+
+          for i in range(self.H):
+                w = max(0.01, np.random.normal(1, 0.2))     # reservation wage
+                m = max(0.01, np.random.normal(1, 0.2))     # liquidity
+                c = random.randint(21, 105)                 # initial consumption
+
+                hh = Household(
+                    unique_id=i,
+                    model=self,
+                    w=w,
+                    m=m,
+                    c=c,
+                    num_typeA=self.num_typeA,
+                    alpha=self.alpha,
+                )
+                self.households.append(hh)
+    
+    def init_firms(self):
+          """
+          Create firms with randomised starting values.
+          Mirrors Java buildModel() firm loop.
+          """
+          self.firms = []
+
+          for i in range(self.F):
+                w = max(0.01, np.random.normal(1, 0.2))
+                inv = random.randint(0, 10)
+                p = max(0.001, np.random.normal(0.1, 0.02))
+
+                firm = Firm(
+                    unique_id=i,
+                    model=self,
+                    w=w,
+                    m=0.0,
+                    inv=inv,
+                    inv_min=int(inv * 0.9),
+                    inv_max=int(inv * 1.1),
+                    p=p,
+                    p_min=p * 0.9,
+                    p_max=p * 1.1,
+                    delta=self.delta,
+                    Phi_min=self.Phi_min,
+                    Phi_max=self.Phi_max,
+                    phi_min=self.phi_min,
+                    phi_max=self.phi_max,
+                    theta=self.theta,
+                    lambda_=self.lambda_,
+                    gamma=self.gamma,
+                    Theta=self.Theta,
+                )
+                self.firms.append(firm)
+    
+    def _init_connections(self):
+          """
+          Wire up type A and type B connections.
+          Mirrors Java buildModel() connection loop.
+          """
+          for h in range(self.H):
+                hh = self.households[h]
+
+                # type B - assign one employer at random
+                f = self.random.randint(0, self.F - 1)
+                self.matrix_B[h][f] = True
+                hh.typeB = f
+                hh.employed = True
+                self.firms[f].typeB.append(h)
+
+                # type A - assign num_typeA distinct firms
+                counter = 0
+                while counter < self.num_typeA:
+                      f = random.randint(0, self.F - 1)
+                      if not self.matrix_A[h][f]:
+                            self.matrix_A[h][f] = True
+                            hh.typeA[counter] = f
+                            self.firms[f].typeA.append(h)
+                            counter += 1
+
+    # ------------------------------------------------------------------
+    # Data collector reporters
+    # ------------------------------------------------------------------
+
+    def _get_employment_rate(self):
+          employed = sum(1 for hh in self.households if hh.employed)
+          return (employed / self.H) * 100
+    
+    def _get_mean_price(self):
+          return sum(f.p for f in self.firms) / self.F
+    
+    def _get_mean_wage(self):
+          return sum(f.w for f in self.firms) / self.F
+    
+    def _get_total_production(self):
+          return sum(f.lambda_ * len(f.typeB) for f in self.firms)
+
+    # ------------------------------------------------------------------
+    # Step — placeholder for now
+    # ------------------------------------------------------------------
+
+    def step(self):
+          self.datacollector.collect(self)
