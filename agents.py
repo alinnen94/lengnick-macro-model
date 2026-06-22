@@ -22,8 +22,8 @@ class Household(Agent):
         Consumption parameter (eq. 12).
     """
 
-    def __init__(self, unique_id, model, w, m, c, num_typeA, alpha):
-        super().__init__(unique_id, model)
+    def __init__(self, model, w, m, c, num_typeA, alpha):
+        super().__init__(model)
 
         self.w = w                          # reservation wage
         self.m = m                          # liquidity
@@ -104,9 +104,9 @@ class Firm(Agent):
         Probability of considering a price change (Fig. 3).
     """
 
-    def __init__(self, unique_id, model, w, m, inv, inv_min, inv_max, p, p_min, p_max,
+    def __init__(self, model, w, m, inv, inv_min, inv_max, p, p_min, p_max,
                  delta, Phi_min, Phi_max, phi_min, phi_max, theta, lambda_, gamma, Theta):
-        super().__init__(unique_id, model)
+        super().__init__(model)
 
         self.w = w                              # offered wage
         self.m = m                              # liquidity

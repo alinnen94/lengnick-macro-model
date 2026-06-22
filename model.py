@@ -92,7 +92,7 @@ class LengnickModel(Model):
     # Initialisation helpers
     # ------------------------------------------------------------------
 
-    def init_households(self):
+    def _init_households(self):
           """
           Create households with randomised starting values.
           Mirrors Java buildModel() household loop.
@@ -105,7 +105,6 @@ class LengnickModel(Model):
                 c = random.randint(21, 105)                 # initial consumption
 
                 hh = Household(
-                    unique_id=i,
                     model=self,
                     w=w,
                     m=m,
@@ -115,7 +114,7 @@ class LengnickModel(Model):
                 )
                 self.households.append(hh)
     
-    def init_firms(self):
+    def _init_firms(self):
           """
           Create firms with randomised starting values.
           Mirrors Java buildModel() firm loop.
@@ -128,7 +127,6 @@ class LengnickModel(Model):
                 p = max(0.001, np.random.normal(0.1, 0.02))
 
                 firm = Firm(
-                    unique_id=i,
                     model=self,
                     w=w,
                     m=0.0,
