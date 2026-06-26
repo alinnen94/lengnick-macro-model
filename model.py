@@ -22,10 +22,10 @@ class LengnickModel(Model):
         delta=0.019,
         Phi_min=1.025,
         Phi_max=1.15,
-        phi_min=0.25,
-        phi_max=1.0,
+        phi_min=0.01,
+        phi_max=2.0,
         theta=0.02,
-        lambda_=3,
+        lambda_=1,
         gamma=24,
         Theta=0.75,
         # labour market parameters
@@ -85,6 +85,10 @@ class LengnickModel(Model):
                 "Mean Price": self._get_mean_price,
                 "Mean Wage": self._get_mean_wage,
                 "Total Production": self._get_total_production,
+                "Household Liquidity": self._get_household_liquidity,
+                "Firm Liquidity":      self._get_firm_liquidity,
+                "Mean Reservation Wage": self._get_mean_reservation_wage,
+                "Price Dispersion":    self._get_price_dispersion,
             }
         )
 
@@ -124,7 +128,7 @@ class LengnickModel(Model):
         for i in range(self.F):
             w = max(0.01, np.random.normal(1, 0.2))
             inv = random.uniform(0, 10)
-            p = max(0.001, np.random.normal(0.1, 0.02))
+            p = max(0.001, np.random.normal(0.05, 0.01))
 
             firm = Firm(
                 model=self,
@@ -189,6 +193,27 @@ class LengnickModel(Model):
 
     def _get_total_production(self):
         return sum(f.lambda_ * len(f.typeB) for f in self.firms)
+    
+    def _get_household_liquidity(self):
+        return sum(hh.m for hh in self.households)
+
+    def _get_firm_liquidity(self):
+        return sum(f.m + f.m_buffer for f in self.firms)
+
+    def _get_mean_reservation_wage(self):
+        return sum(hh.w for hh in self.households) / self.H
+
+    def _get_price_dispersion(self):
+        """Standard deviation of prices across firms — measures how much
+        firms differ in price (key signal of competition strength)."""
+        prices = [f.p for f in self.firms]
+        mean = sum(prices) / self.F
+        variance = sum((p - mean) ** 2 for p in prices) / self.F
+        return variance ** 0.5
+    
+    def _get_firm_sizes(self):
+        """Returns list of current employee counts per firm — for the histogram."""
+        return [len(f.typeB) for f in self.firms]
 
     # ------------------------------------------------------------------
     # Step
@@ -240,6 +265,7 @@ class LengnickModel(Model):
             firm.update_inv_range()
             firm.update_price_range()
             firm.update_demand_for_labour()
+            firm.d = 0.0        # reset demand counter - paper's d_old is "most recent month"
 
         # 2. process firing - mirrors Java per-firm firing loop in updateTypeB
         self._process_firing()
@@ -247,7 +273,11 @@ class LengnickModel(Model):
         # 3. labour market search and rewiring (hiring)
         self._update_typeB()
 
-        # 4. households recompute P and plan monthly consumption
+        # 4. goods market network rewiring (price and quantity based)
+        self._update_typeA_price()
+        self._update_typeA_quantity()
+
+        # 5. households recompute P and plan monthly consumption
         self._update_households_average_prices()
         for hh in self.households:
             hh.update_consumption()
@@ -320,6 +350,113 @@ class LengnickModel(Model):
                         break
 
                 candidates.remove(f_id)
+    
+    def _update_typeA_price(self):
+        """
+        Households drop a current type A connection in favour of a cheaper one.
+        Mirrors Java updateTypeA_Price().
+
+        For each household, with probability Psi_price:
+        - Pick a random current type A firm (f) and a random non-connected firm (f_new),
+            where f_new is weighted by firm size (employee count).
+        - If f_new's price is at least xi (1%) cheaper than f, swap.
+        """
+        for h in range(self.H):
+            household = self.households[h]
+
+            if random.random() >= self.Psi_price:
+                continue
+
+            # pick a random existing type A firm to potentially drop
+            f_index = random.randint(0, self.num_typeA - 1)
+            f_id = household.typeA[f_index]
+            f = self.firms[f_id]
+
+            # build pool of candidate non-connected firms, weighted by size
+            non_connected = [
+                (fid, len(self.firms[fid].typeB))
+                for fid in range(self.F)
+                if not self.matrix_A[h][fid]
+            ]
+            if not non_connected:
+                continue
+
+            total_weight = sum(weight for _, weight in non_connected)
+            if total_weight == 0:
+                # all firms have zero employees — fall back to uniform
+                f_new_id = non_connected[random.randint(0, len(non_connected) - 1)][0]
+            else:
+                # weighted random selection by firm size
+                pick = random.uniform(0, total_weight)
+                cumulative = 0
+                f_new_id = non_connected[-1][0]   # fallback
+                for fid, weight in non_connected:
+                    cumulative += weight
+                    if cumulative >= pick:
+                        f_new_id = fid
+                        break      
+            
+            f_new = self.firms[f_new_id]
+
+            # swap if f_new is at least xi cheaper
+            if f.p > 0 and (f.p - f_new.p) / f.p >= self.xi:
+                self.matrix_A[h][f_id] = False
+                self.matrix_A[h][f_new_id] = True
+                household.typeA[f_index] = f_new_id
+                f.typeA.remove(h)
+                f_new.typeA.append(h)
+    
+    def _update_typeA_quantity(self):
+        """
+        Households drop a type A firm that rationed them, in favour of a new one.
+        Mirrors Java updateTypeA_Quantity().
+
+        For each household with unmet demand last month, with probability Psi_quant:
+        - Drop a firm weighted by how much it failed to satisfy demand.
+        - Pick a uniformly random non-connected firm to replace it.
+        """
+        for h in range(self.H):
+            household = self.households[h]
+
+            # compute total unmet demand across this household's type A firms
+            constraints = [self.matrix_A_constraints[h][fid] for fid in household.typeA]
+            tot_constraint = sum(constraints)
+
+            if tot_constraint <= 0:
+                continue
+
+            if random.random() >= self.Psi_quant:
+                continue
+
+            # weighted choice of which firm to drop
+            pick = random.uniform(0, tot_constraint)
+            cumulative = 0
+            f_index_to_drop = 0
+            for i, c in enumerate(constraints):
+                cumulative += c
+                if cumulative >= pick:
+                    f_index_to_drop = i
+                    break
+
+            f_id = household.typeA[f_index_to_drop]
+            f = self.firms[f_id]
+
+            # uniformly random non-connected firm
+            non_connected = [fid for fid in range(self.F) if not self.matrix_A[h][fid]]
+            if not non_connected:
+                continue
+            f_new_id = non_connected[random.randint(0, len(non_connected) - 1)]
+            f_new = self.firms[f_new_id]
+
+            # swap
+            self.matrix_A[h][f_id] = False
+            self.matrix_A[h][f_new_id] = True
+            household.typeA[f_index_to_drop] = f_new_id
+            f.typeA.remove(h)
+            f_new.typeA.append(h)
+
+        # reset constraints matrix for next month
+        self.matrix_A_constraints = [[0] * self.F for _ in range(self.H)]
 
     def _update_households_average_prices(self):
         """

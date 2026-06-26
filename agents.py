@@ -37,8 +37,8 @@ class Household(Agent):
 
     def update_consumption(self):
         """
-        Update planned monthly consumption.
-        Mirrors Java: Math.min((m/P) * Math.exp(alpha), m/P)
+        Update planned monthly consumption — equation (12).
+        c = min((m/P)^alpha, m/P) — paper's true formula.
         Budget constraint: never exceeds m/P.
         """
         if self.P > 0 and self.m > 0:
@@ -152,6 +152,7 @@ class Firm(Agent):
         self.open_position = 0  # current open vacancies
         self.to_fire = 0  # workers to fire at start of next month
         self.num_months_with_open_positions = 0
+        self.had_open_positions_last_month = False
         self.typeA = []  # list of household IDs buying from this firm
         self.typeB = []  # list of household IDs employed by this firm
 
@@ -185,17 +186,23 @@ class Firm(Agent):
     def update_demand_for_labour(self):
         """
         Hiring/firing and price adjustment decisions.
-        Mirrors Java updateDemandForLabour() method and Fig. 3 flow chart.
+        Mirrors Java updateDemandForLabour() and Fig. 3 flow chart,
+        but with the wage-decrease branch corrected to follow the
+        paper's intent: wages only fall if previously-open positions
+        were filled, not if positions were never opened in the first place.
         """
         # wage adjustment based on open position history
         if self.open_position > 0:
             self.num_months_with_open_positions += 1
-        else:
-            self.w *= 0.9  # all positions filled - reduce wage
+        elif self.had_open_positions_last_month:
+            self.w *= 0.9   # positions were filled — reduce wage
 
         if self.num_months_with_open_positions == self.gamma:
-            self.w *= 1.1  # had open positions for gamma months - raise wage
+            self.w *= 1.1   # had open positions for gamma months — raise wage
             self.num_months_with_open_positions = 0
+
+        # remember for next month
+        self.had_open_positions_last_month = self.open_position > 0
 
         # inventory vs bounds - hire, fire, or adjust price
         if self.inv < self.inv_min:

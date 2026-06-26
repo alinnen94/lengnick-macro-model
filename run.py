@@ -2,28 +2,23 @@ from model import LengnickModel
 
 model = LengnickModel()
 
-for month in range(1, 6):
+for month in range(1, 101):
     for _ in range(21):
         model.step()
 
-    # diagnostic: what's actually going on inside the firms?
-    total_d = sum(f.d for f in model.firms)
-    total_inv = sum(f.inv for f in model.firms)
-    total_open = sum(f.open_position for f in model.firms)
-    total_to_fire = sum(f.to_fire for f in model.firms)
-    firms_with_workers = sum(1 for f in model.firms if len(f.typeB) > 0)
-    firms_with_zero_workers = sum(1 for f in model.firms if len(f.typeB) == 0)
-    total_hh_liquidity = sum(hh.m for hh in model.households)
-    mean_household_c = sum(hh.c for hh in model.households) / model.H
-    employed_hh = sum(1 for hh in model.households if hh.employed)
+    # only log every 5 months
+    if month % 5 == 0:
+        employed_hh = sum(1 for hh in model.households if hh.employed)
+        mean_p = sum(f.p for f in model.firms) / model.F
+        mean_w = sum(f.w for f in model.firms) / model.F
+        total_inv = sum(f.inv for f in model.firms)
+        total_open = sum(f.open_position for f in model.firms)
+        mean_c = sum(hh.c for hh in model.households) / model.H
 
-    print(f"\n=== Month {month} ===")
-    print(f"Employed households:        {employed_hh}/{model.H}")
-    print(f"Firms with workers:         {firms_with_workers}")
-    print(f"Firms with zero workers:    {firms_with_zero_workers}")
-    print(f"Total demand (sum of f.d):  {total_d}")
-    print(f"Total inventory:            {total_inv}")
-    print(f"Total open positions:       {total_open}")
-    print(f"Total queued firings:       {total_to_fire}")
-    print(f"Total household liquidity:  {total_hh_liquidity:.2f}")
-    print(f"Mean household c (planned): {mean_household_c:.2f}")
+        print(f"Month {month:>3} | "
+              f"Emp: {employed_hh:>4}/1000 | "
+              f"Wage: {mean_w:>6.4f} | "
+              f"Price: {mean_p:>6.4f} | "
+              f"Inv: {total_inv:>9.0f} | "
+              f"Open: {total_open:>3} | "
+              f"c̄: {mean_c:>5.2f}")

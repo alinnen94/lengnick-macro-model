@@ -104,6 +104,117 @@ def production_figure(model):
     return fig
 
 
+def reservation_wage_figure(model):
+    df = model.datacollector.get_model_vars_dataframe()
+
+    fig = go.Figure()
+    if not df.empty:
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df["Mean Wage"],
+            mode="lines", line=dict(color="#E45756", width=2),
+            name="Mean Firm Wage (offered)",
+        ))
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df["Mean Reservation Wage"],
+            mode="lines", line=dict(color="#4C78A8", width=2),
+            name="Mean Reservation Wage (households)",
+        ))
+    fig.update_layout(
+        title="Wage Pressure",
+        xaxis_title="Step",
+        yaxis_title="Wage",
+        template="plotly_white",
+        height=350,
+        margin=dict(l=50, r=20, t=50, b=40),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    return fig
+
+
+def liquidity_figure(model):
+    df = model.datacollector.get_model_vars_dataframe()
+
+    fig = go.Figure()
+    if not df.empty:
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df["Household Liquidity"],
+            mode="lines", line=dict(color="#72B7B2", width=2),
+            name="Household Liquidity",
+        ))
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df["Firm Liquidity"],
+            mode="lines", line=dict(color="#B279A2", width=2),
+            name="Firm Liquidity",
+        ))
+    fig.update_layout(
+        title="Aggregate Liquidity",
+        xaxis_title="Step",
+        yaxis_title="Money",
+        template="plotly_white",
+        height=350,
+        margin=dict(l=50, r=20, t=50, b=40),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    return fig
+
+
+def price_dispersion_figure(model):
+    df = model.datacollector.get_model_vars_dataframe()
+
+    fig = go.Figure()
+    if not df.empty:
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df["Price Dispersion"],
+            mode="lines", line=dict(color="#F58518", width=2),
+            name="Price Dispersion (std dev across firms)",
+        ))
+    fig.update_layout(
+        title="Price Dispersion Across Firms",
+        xaxis_title="Step",
+        yaxis_title="Standard Deviation",
+        template="plotly_white",
+        height=350,
+        margin=dict(l=50, r=20, t=50, b=40),
+    )
+    return fig
+
+
+def firm_size_figure(model):
+    sizes = model._get_firm_sizes()
+
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(
+        x=sizes,
+        marker=dict(color="#54A24B", line=dict(color="#2A6019", width=1)),
+        nbinsx=30,
+        name="Firms",
+    ))
+
+    if sizes:
+        mean_size = sum(sizes) / len(sizes)
+        # sample skewness
+        n = len(sizes)
+        variance = sum((s - mean_size) ** 2 for s in sizes) / n
+        std = variance ** 0.5
+        if std > 0:
+            skew = sum((s - mean_size) ** 3 for s in sizes) / (n * std ** 3)
+        else:
+            skew = 0.0
+        subtitle = f"mean = {mean_size:.1f}, skewness = {skew:.2f}"
+    else:
+        subtitle = ""
+
+    fig.update_layout(
+        title=f"Firm Size Distribution<br><sub>{subtitle}</sub>",
+        xaxis_title="Workers per firm",
+        yaxis_title="Number of firms",
+        template="plotly_white",
+        height=350,
+        margin=dict(l=50, r=20, t=70, b=40),
+    )
+    return fig
+
+
 # ----------------------------------------------------------------------
 # Page layout
 # ----------------------------------------------------------------------
@@ -146,3 +257,7 @@ def Page():
         solara.FigurePlotly(employment_figure(model))
         solara.FigurePlotly(price_wage_figure(model))
         solara.FigurePlotly(production_figure(model))
+        solara.FigurePlotly(liquidity_figure(model))
+        solara.FigurePlotly(reservation_wage_figure(model))
+        solara.FigurePlotly(price_dispersion_figure(model))
+        solara.FigurePlotly(firm_size_figure(model))
