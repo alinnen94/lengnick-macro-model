@@ -2,17 +2,28 @@ from model import LengnickModel
 
 model = LengnickModel()
 
-# print basic initialisation stats
-total_employed = sum(1 for hh in model.households if hh.employed)
-total_typeA = sum(len(f.typeA) for f in model.firms)
-total_typeB = sum(len(f.typeB) for f in model.firms)
+for month in range(1, 6):
+    for _ in range(21):
+        model.step()
 
-print(f"Households:      {model.H}")
-print(f"Firms:           {model.F}")
-print(f"Employed HH:     {total_employed}")
-print(f"TypeA links:     {total_typeA}  (expect {model.H * model.num_typeA})")
-print(f"TypeB links:     {total_typeB}  (expect ~{model.H})")
-print(f"Employment rate: {model._get_employment_rate():.1f}%")
-print(f"Mean price:      {model._get_mean_price():.4f}")
-print(f"Mean wage:       {model._get_mean_wage():.4f}")
-print("\nInitialisation successful.")
+    # diagnostic: what's actually going on inside the firms?
+    total_d = sum(f.d for f in model.firms)
+    total_inv = sum(f.inv for f in model.firms)
+    total_open = sum(f.open_position for f in model.firms)
+    total_to_fire = sum(f.to_fire for f in model.firms)
+    firms_with_workers = sum(1 for f in model.firms if len(f.typeB) > 0)
+    firms_with_zero_workers = sum(1 for f in model.firms if len(f.typeB) == 0)
+    total_hh_liquidity = sum(hh.m for hh in model.households)
+    mean_household_c = sum(hh.c for hh in model.households) / model.H
+    employed_hh = sum(1 for hh in model.households if hh.employed)
+
+    print(f"\n=== Month {month} ===")
+    print(f"Employed households:        {employed_hh}/{model.H}")
+    print(f"Firms with workers:         {firms_with_workers}")
+    print(f"Firms with zero workers:    {firms_with_zero_workers}")
+    print(f"Total demand (sum of f.d):  {total_d}")
+    print(f"Total inventory:            {total_inv}")
+    print(f"Total open positions:       {total_open}")
+    print(f"Total queued firings:       {total_to_fire}")
+    print(f"Total household liquidity:  {total_hh_liquidity:.2f}")
+    print(f"Mean household c (planned): {mean_household_c:.2f}")

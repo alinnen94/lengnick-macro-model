@@ -24,11 +24,15 @@ def employment_figure(model):
 
     fig = go.Figure()
     if not df.empty:
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df["Employment Rate"],
-            mode="lines", line=dict(color="#4C78A8", width=2),
-            name="Employment Rate",
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df["Employment Rate"],
+                mode="lines",
+                line=dict(color="#4C78A8", width=2),
+                name="Employment Rate",
+            )
+        )
     fig.update_layout(
         title="Employment Rate Over Time",
         xaxis_title="Step",
@@ -45,16 +49,24 @@ def price_wage_figure(model):
 
     fig = go.Figure()
     if not df.empty:
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df["Mean Price"],
-            mode="lines", line=dict(color="#54A24B", width=2),
-            name="Mean Price",
-        ))
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df["Mean Wage"],
-            mode="lines", line=dict(color="#E45756", width=2),
-            name="Mean Wage",
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df["Mean Price"],
+                mode="lines",
+                line=dict(color="#54A24B", width=2),
+                name="Mean Price",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df["Mean Wage"],
+                mode="lines",
+                line=dict(color="#E45756", width=2),
+                name="Mean Wage",
+            )
+        )
     fig.update_layout(
         title="Price & Wage Trends",
         xaxis_title="Step",
@@ -72,11 +84,15 @@ def production_figure(model):
 
     fig = go.Figure()
     if not df.empty:
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df["Total Production"],
-            mode="lines", line=dict(color="#F58518", width=2),
-            name="Total Production",
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df["Total Production"],
+                mode="lines",
+                line=dict(color="#F58518", width=2),
+                name="Total Production",
+            )
+        )
     fig.update_layout(
         title="Total Production",
         xaxis_title="Step",
@@ -93,7 +109,9 @@ def production_figure(model):
 # ----------------------------------------------------------------------
 @solara.component
 def Page():
-    model = solara.use_memo(make_model, dependencies=[households.value, firms.value, seed.value])
+    model = solara.use_memo(
+        make_model, dependencies=[households.value, firms.value, seed.value]
+    )
     step_count = solara.use_reactive(0)
 
     def do_step():
@@ -117,9 +135,7 @@ def Page():
         solara.SliderInt("Households", value=households, min=100, max=3000, step=100)
         solara.SliderInt("Firms", value=firms, min=10, max=300, step=10)
         solara.SliderInt("Random seed", value=seed, min=1, max=100, step=1)
-        solara.Markdown(
-            "_Changing a parameter rebuilds the model from scratch._"
-        )
+        solara.Markdown("_Changing a parameter rebuilds the model from scratch._")
 
     with solara.Column(style={"padding": "20px"}):
         with solara.Row(style={"gap": "10px", "margin-bottom": "10px"}):
