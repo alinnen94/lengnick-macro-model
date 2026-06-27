@@ -28,6 +28,7 @@ class LengnickModel(Model):
         lambda_=1,
         gamma=24,
         Theta=0.75,
+        chi=0.1,   # liquidity buffer ratio (eq. 15)
         # labour market parameters
         beta=5,
         pi=0.1,
@@ -53,6 +54,7 @@ class LengnickModel(Model):
         self.lambda_ = lambda_
         self.gamma = gamma
         self.Theta = Theta
+        self.chi = chi
         self.beta = beta
         self.pi = pi
         self.xi = xi
@@ -529,6 +531,8 @@ class LengnickModel(Model):
                 firm.inv -= txn
                 firm.m += txn * firm.p
                 household.m -= txn * firm.p
+                if household.m < 0:
+                    household.m = 0.0   # clamp against float precision errors
                 purchased += txn
 
                 # household won't return to this firm today
@@ -548,6 +552,7 @@ class LengnickModel(Model):
         4. Households update reservation wage based on this month's income.
         """
         self._firms_pay_wages()
+        self._firms_top_up_buffer()
         self._firms_pay_profits()
         for hh in self.households:
             hh.update_reservation_wage()
@@ -590,6 +595,24 @@ class LengnickModel(Model):
             from_buffer = min(amount_paid - from_m, firm.m_buffer)
             firm.m -= from_m
             firm.m_buffer -= from_buffer
+    
+    def _firms_top_up_buffer(self):
+        """
+        Replenish m_buffer toward target = zeta * w * len(typeB).
+        Mirrors paper equation (15). Top-up is drawn from current m;
+        if m is insufficient, buffer rises by whatever m can provide.
+
+        This step is NOT in the Java, which leaves m_buffer to drift
+        downward indefinitely. Documented divergence #12.
+        """
+        for firm in self.firms:
+            target = self.chi * firm.w * len(firm.typeB)
+            gap = target - firm.m_buffer
+            if gap <= 0:
+                continue  # buffer is already at or above target
+            top_up = min(gap, firm.m)
+            firm.m_buffer += top_up
+            firm.m -= top_up
 
     def _firms_pay_profits(self):
         """
@@ -597,11 +620,19 @@ class LengnickModel(Model):
         All remaining firm liquidity is pooled and distributed to households
         proportional to each household's current liquidity (a proxy for
         stock ownership — eq. as in Section 2.4).
+
+        If aggregate profit is negative (collective losses), no distribution
+        occurs — firms absorb the losses by keeping their negative balances.
         """
         # pool aggregate firm liquidity
-        aggregate_profit = 0.0
+        aggregate_profit = sum(firm.m for firm in self.firms)
+
+        # only distribute positive profits
+        if aggregate_profit <= 0:
+            return  # firms keep their (possibly negative) m balances
+
+        # zero out firms' m since profit is being extracted
         for firm in self.firms:
-            aggregate_profit += firm.m
             firm.m = 0.0
 
         # share of profit proportional to current liquidity
