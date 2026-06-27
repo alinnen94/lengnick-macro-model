@@ -67,6 +67,9 @@ class LengnickModel(Model):
         # time tracking
         self.day = 0  # current day within month (1-20)
         self.month = 0  # current month
+        self.last_month_mean_price = None
+        self.delta_p_history = []   # list of (delta_p, unemployment) tuples per month
+        self.beveridge_history = []  # list of (vacancies, unemployment) tuples per month
 
         # connection matrices - mirrors Java matrix_A and matrix_B
         self.matrix_A = [[False] * F for _ in range(H)]
@@ -236,6 +239,7 @@ class LengnickModel(Model):
         
         if self.day == 20:
             self._end_of_month()
+            self._record_monthly_phillips_point()
 
         self.datacollector.collect(self)
 
@@ -547,6 +551,24 @@ class LengnickModel(Model):
         self._firms_pay_profits()
         for hh in self.households:
             hh.update_reservation_wage()
+
+    def _record_monthly_phillips_point(self):
+        """
+        Record delta_p (price change) and current unemployment for the
+        Phillips curve scatter plot. Called once per month after end-of-month.
+        Also records vacancies for the Beveridge curve.
+        """
+        current_mean_price = self._get_mean_price()
+
+        if self.last_month_mean_price is not None:
+            delta_p = current_mean_price - self.last_month_mean_price
+            unemployed = self.H - sum(1 for hh in self.households if hh.employed)
+            self.delta_p_history.append((delta_p, unemployed))
+
+            vacancies = sum(f.open_position for f in self.firms)
+            self.beveridge_history.append((vacancies, unemployed))
+
+        self.last_month_mean_price = current_mean_price
 
     def _firms_pay_wages(self):
         """

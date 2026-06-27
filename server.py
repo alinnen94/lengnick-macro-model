@@ -215,6 +215,56 @@ def firm_size_figure(model):
     return fig
 
 
+def phillips_curve_figure(model):
+    history = model.delta_p_history
+
+    fig = go.Figure()
+    if history:
+        delta_ps = [d for d, _ in history]
+        unemploys = [u for _, u in history]
+        fig.add_trace(go.Scatter(
+            x=delta_ps, y=unemploys,
+            mode="markers",
+            marker=dict(color="#4C78A8", size=5, opacity=0.6),
+            name="Monthly observation",
+        ))
+    fig.update_layout(
+        title="Phillips Curve (Unemployment vs ΔPrice)",
+        xaxis_title="Δ Mean Price (month-over-month)",
+        yaxis_title="Unemployed Households",
+        template="plotly_white",
+        height=400,
+        margin=dict(l=50, r=20, t=50, b=40),
+        showlegend=False,
+    )
+    return fig
+
+
+def beveridge_curve_figure(model):
+    history = model.beveridge_history
+
+    fig = go.Figure()
+    if history:
+        vacancies = [v for v, _ in history]
+        unemploys = [u for _, u in history]
+        fig.add_trace(go.Scatter(
+            x=vacancies, y=unemploys,
+            mode="markers",
+            marker=dict(color="#E45756", size=5, opacity=0.6),
+            name="Monthly observation",
+        ))
+    fig.update_layout(
+        title="Beveridge Curve (Unemployment vs Vacancies)",
+        xaxis_title="Vacancies (open positions)",
+        yaxis_title="Unemployed Households",
+        template="plotly_white",
+        height=400,
+        margin=dict(l=50, r=20, t=50, b=40),
+        showlegend=False,
+    )
+    return fig
+
+
 # ----------------------------------------------------------------------
 # Page layout
 # ----------------------------------------------------------------------
@@ -261,3 +311,5 @@ def Page():
         solara.FigurePlotly(reservation_wage_figure(model))
         solara.FigurePlotly(price_dispersion_figure(model))
         solara.FigurePlotly(firm_size_figure(model))
+        solara.FigurePlotly(phillips_curve_figure(model))
+        solara.FigurePlotly(beveridge_curve_figure(model))
