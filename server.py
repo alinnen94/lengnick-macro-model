@@ -356,42 +356,42 @@ with about_col:
         st.markdown("""
         ### About this model
 
-        This is a Python implementation of **Matthias Lengnick's (2013) baseline
-        agent-based macroeconomic model**, published in the *Journal of Economic
-        Behavior & Organization*.
+        A Python implementation of **Matthias Lengnick's (2013) baseline
+        agent-based macroeconomic model**, published in the *Journal of
+        Economic Behavior & Organization*.
 
-        The model has just two types of agent — **1,000 households** and
-        **100 firms** — connected through a dynamic network of trading
-        relationships. Despite its simplicity, it reproduces a wide range of
-        empirical macroeconomic regularities entirely from local interactions,
-        with no central market-clearing mechanism.
+        Two agent types — households and firms — are connected by a dynamic
+        network of trading relationships. There is no central market-clearing
+        mechanism: every transaction happens between named individuals, and
+        aggregate regularities emerge from local interaction alone.
 
         #### Views
 
-        - **📈 Headlines** — core dynamics: employment, prices, wages,
-            production, and the sawtooth flow of liquidity between households
-            and firms (mirroring paper Figure 7).
+        - **📈 Headlines** — employment, prices, wages, production, and the
+          sawtooth flow of liquidity between households and firms
+          (paper Fig. 7).
 
-        - **🎯 Stylised Facts** — reproductions of the paper's main empirical
-            claims (Section 3): the Phillips curve, the Beveridge curve, and the
-            right-skewed firm size distribution.
+        - **🎯 Stylised Facts** — the paper's main empirical claims
+          (Section 3): the Phillips curve, the Beveridge curve, and the
+          right-skewed firm size distribution.
 
-        - **🔬 Diagnostics** — internal model diagnostics: wage pressure
-            (gap between offered and reservation wages) and price dispersion
-            across firms.
+        - **🔬 Diagnostics** — wage pressure (the gap between offered and
+          reservation wages) and price dispersion across firms.
 
         #### Controls
 
-        Use the sidebar to set parameters, then click **Initialise / Reset**
-        to create the model. The simulation buttons step the model forward
-        — try **Run 50 months** to let the dynamics fully express.
+        Set parameters in the sidebar and click **Initialise / Reset**, then
+        step the model forward. Around 50 months is enough for the dynamics
+        to settle; 200 shows the longer cycles.
 
         ---
 
-        *Implementation notes: this version uses the paper's stated equations
-        for consumption (eq. 12), wage adjustment, and price bounds, with
-        several deliberate corrections to known bugs in the original Java
-        source code. See README for details.*
+        *This implementation departs from both the published paper and the
+        original Java source in several documented ways — including the
+        consumption function, the price bounds, labour productivity, and the
+        speed at which firms can adjust headcount. Most correct behaviour in
+        the Java that contradicts the paper's own text. See the README for
+        the full list and the reasoning behind each.*
         """)
 
 # Status badges — step, month, year
