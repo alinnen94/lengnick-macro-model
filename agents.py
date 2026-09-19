@@ -1,6 +1,7 @@
 from mesa import Agent
 import numpy as np
 import random
+import math
 
 
 class Household(Agent):
@@ -155,6 +156,7 @@ class Firm(Agent):
         self.had_open_positions_last_month = False
         self.typeA = []  # list of household IDs buying from this firm
         self.typeB = []  # list of household IDs employed by this firm
+        self.branch_run = 0 # +n = n consecutive months hiring, -n = firing
 
     # --- Monthly methods ---
 
@@ -186,33 +188,84 @@ class Firm(Agent):
     def update_demand_for_labour(self):
         """
         Hiring/firing and price adjustment decisions.
-        Mirrors Java updateDemandForLabour() and Fig. 3 flow chart,
-        but with the wage-decrease branch corrected to follow the
-        paper's intent: wages only fall if previously-open positions
-        were filled, not if positions were never opened in the first place.
+
+        Divergences from the original Java, all deliberate:
+        - Wage only falls if previously-open positions were filled, not
+          whenever open_position == 0 (Java's version spirals wages to zero).
+        - Hiring/firing scales with the inventory gap, capped at 3 workers
+          per month, rather than a flat 1 (the paper's one-per-month limit
+          leaves large firms permanently unable to reach their target).
+        - A firm with no workers always hires and never adjusts price
+          (see the guard below).
         """
-        # wage adjustment based on open position history
+        # --- wage adjustment based on open position history ---
         if self.open_position > 0:
             self.num_months_with_open_positions += 1
         elif self.had_open_positions_last_month:
             self.w *= 0.9   # positions were filled — reduce wage
 
         if self.num_months_with_open_positions == self.gamma:
-            self.w *= 1.1   # had open positions for gamma months — raise wage
+            self.w *= 1.1   # open for gamma months — raise wage
             self.num_months_with_open_positions = 0
 
-        # remember for next month
         self.had_open_positions_last_month = self.open_position > 0
 
-        # inventory vs bounds - hire, fire, or adjust price
-        if self.inv < self.inv_min:
+        d = self.model.diag
+        monthly_output_per_worker = self.lambda_ * 21
+
+        # --- a firm with no workers is dead and must hire ---
+        # Without this it can be trapped permanently in whichever branch its
+        # inventory happens to fall in: stuck above inv_max it never
+        # advertises (so the labour market cannot rescue it) and cuts price
+        # every month; stuck below inv_min it ratchets price up forever.
+        # The paper assumes firms always operate and never covers this case.
+        if len(self.typeB) == 0:
+            d["hire_branch"] += 1
+            self.branch_run = self.branch_run + 1 if self.branch_run > 0 else 1
             self.open_position += 1
-            if self.p < self.p_max and random.random() < self.Theta:
+            d["vacancies_created"] += 1
+            return
+
+        # --- inventory vs bounds: hire, fire, or adjust price ---
+        if self.inv < self.inv_min:
+            d["hire_branch"] += 1
+            self.branch_run = self.branch_run + 1 if self.branch_run > 0 else 1
+
+            gap = self.inv_min - self.inv
+            needed = (math.ceil(gap / monthly_output_per_worker)
+                      if monthly_output_per_worker > 0 else 1)
+            added = max(1, min(needed, 3))
+            self.open_position += added
+            d["vacancies_created"] += added
+
+            if self.p >= self.p_max:
+                d["price_up_blocked_by_pmax"] += 1
+            elif random.random() < self.Theta:
                 self.increase_price()
+                d["price_up_executed"] += 1
+            else:
+                d["price_up_skipped_prob"] += 1
+
         elif self.inv > self.inv_max:
-            self.to_fire += 1
-            if self.p > self.p_min and random.random() < self.Theta:
+            d["fire_branch"] += 1
+            self.branch_run = self.branch_run - 1 if self.branch_run < 0 else -1
+
+            surplus = self.inv - self.inv_max
+            excess = (math.ceil(surplus / monthly_output_per_worker)
+                      if monthly_output_per_worker > 0 else 1)
+            self.to_fire += max(1, min(excess, 3))
+
+            if self.p <= self.p_min:
+                d["price_down_blocked_by_pmin"] += 1
+            elif random.random() < self.Theta:
                 self.decrease_price()
+                d["price_down_executed"] += 1
+            else:
+                d["price_down_skipped_prob"] += 1
+
+        else:
+            d["no_branch"] += 1
+            self.branch_run = 0
 
     def increase_price(self):
         """Equation (10) - raise price by random factor within [0, theta] range."""

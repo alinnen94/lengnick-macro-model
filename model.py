@@ -73,6 +73,10 @@ class LengnickModel(Model):
         self.delta_p_history = []   # list of (delta_p, unemployment) tuples per month
         self.beveridge_history = []  # list of (vacancies, unemployment) tuples per month
 
+        # diagnostics — reset at the start of each month
+        self.diag = {}
+        self._reset_diagnostics()
+
         # connection matrices - mirrors Java matrix_A and matrix_B
         self.matrix_A = [[False] * F for _ in range(H)]
         self.matrix_B = [[False] * F for _ in range(H)]
@@ -182,6 +186,56 @@ class LengnickModel(Model):
                     self.firms[f].typeA.append(h)
                     counter += 1
 
+    def _reset_diagnostics(self):
+        """Per-month counters for instrumenting firm decisions."""
+        self.diag = {
+            "hire_branch": 0,             # firms with inv < inv_min
+            "fire_branch": 0,             # firms with inv > inv_max
+            "no_branch": 0,               # firms within their inventory band
+            "price_up_executed": 0,
+            "price_up_blocked_by_pmax": 0,
+            "price_up_skipped_prob": 0,
+            "price_down_executed": 0,
+            "price_down_blocked_by_pmin": 0,
+            "price_down_skipped_prob": 0,
+            "vacancies_created": 0,
+            "hired_from_unemployment": 0,
+            "job_switches": 0,
+            "fires_executed": 0,
+            "units_transacted": 0.0,
+            "demand_recorded": 0.0,
+        }
+
+    def _check_employment_consistency(self):
+        """Cross-check household and firm employment records.
+        Returns a dict of mismatches — all should be zero."""
+        # households that say they're employed
+        hh_employed = {h for h, hh in enumerate(self.households) if hh.employed}
+
+        # households appearing in some firm's typeB list
+        firm_employed = set()
+        duplicates = 0
+        for firm in self.firms:
+            for h in firm.typeB:
+                if h in firm_employed:
+                    duplicates += 1
+                firm_employed.add(h)
+
+        # households whose typeB points at a firm that doesn't list them
+        broken_links = 0
+        for h, hh in enumerate(self.households):
+            if hh.typeB is not None and h not in self.firms[hh.typeB].typeB:
+                broken_links += 1
+
+        return {
+            "hh_says_employed": len(hh_employed),
+            "in_a_firm_list": len(firm_employed),
+            "employed_but_unlisted": len(hh_employed - firm_employed),
+            "listed_but_unemployed": len(firm_employed - hh_employed),
+            "duplicate_listings": duplicates,
+            "broken_typeB_links": broken_links,
+        }
+
     # ------------------------------------------------------------------
     # Data collector reporters
     # ------------------------------------------------------------------
@@ -265,16 +319,21 @@ class LengnickModel(Model):
         3. Network rewiring: type A (price), type A (quantity), type B
         4. Households recompute average price (P) and consumption plan
         """
-        # 1. firm-level monthly decisions
+        self._reset_diagnostics()
+
+        # 1. process last month's firing decisions
+        #    Paper Section 2.2: "hiring decisions lead to an immediate offering of a
+        #    new position, while firing decisions are implemented with a lag of one
+        #    month." Processing the queue BEFORE this month's decisions gives that lag.
+        self._process_firing()
+
+        # 2. firm-level monthly decisions
         for firm in self.firms:
             firm.new_wage()
             firm.update_inv_range()
             firm.update_price_range()
-            firm.update_demand_for_labour()
-            firm.d = 0.0        # reset demand counter - paper's d_old is "most recent month"
-
-        # 2. process firing - mirrors Java per-firm firing loop in updateTypeB
-        self._process_firing()
+            firm.update_demand_for_labour()   # may queue a firing for next month
+            firm.d = 0.0   # reset demand counter — paper's d_old is "most recent month"
 
         # 3. labour market search and rewiring (hiring)
         self._update_typeB()
@@ -302,6 +361,7 @@ class LengnickModel(Model):
                 household = self.households[hh_id]
                 household.employed = False
                 household.typeB = None
+                self.diag["fires_executed"] += 1
             firm.to_fire = 0
 
     def _update_typeB(self):
@@ -344,6 +404,7 @@ class LengnickModel(Model):
                         employer.typeB.remove(h)
                         firm.typeB.append(h)
                         firm.open_position -= 1
+                        self.diag["job_switches"] += 1
                         household.typeB = f_id
                         break
                 else:
@@ -351,6 +412,7 @@ class LengnickModel(Model):
                         # take the job
                         firm.typeB.append(h)
                         firm.open_position -= 1
+                        self.diag["hired_from_unemployment"] += 1
                         household.typeB = f_id
                         household.employed = True
                         break
@@ -515,6 +577,7 @@ class LengnickModel(Model):
                 # record demand at the firm (note: this overcounts across firms,
                 # but matches the Java implementation exactly)
                 firm.d += daily_demand - purchased
+                self.diag["demand_recorded"] += daily_demand - purchased
 
                 # how much the firm can supply
                 txn = min(daily_demand - purchased, firm.inv)
@@ -534,6 +597,7 @@ class LengnickModel(Model):
                 if household.m < 0:
                     household.m = 0.0   # clamp against float precision errors
                 purchased += txn
+                self.diag["units_transacted"] += txn
 
                 # household won't return to this firm today
                 candidates.pop(idx)
